@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Tangle Toy 扭扭樂紓壓模擬器</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- OrbitControls -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Fredoka', 'Noto Sans TC', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            overflow: hidden;
+            touch-action: none; /* Prevent touch scrolling & pull-to-refresh on mobile */
+        }
+        /* Custom scrollbar for control panel */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(241, 245, 249, 0.5);
+            border-radius: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        /* Glassmorphism styling */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.88);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 h-screen w-screen relative overflow-hidden">
+
+    <!-- 3D Canvas Container -->
+    <div id="canvas-container" class="w-full h-full absolute inset-0 cursor-grab active:cursor-grabbing touch-none select-none" style="touch-action: none;"></div>
+
+    <!-- Top Overlay Header -->
+    <header class="absolute top-4 left-4 right-4 md:right-auto z-10 flex items-center justify-between pointer-events-none">
+        <div class="glass-panel px-4 py-2.5 md:px-5 md:py-3 rounded-2xl shadow-lg flex items-center gap-3 pointer-events-auto">
+            <div class="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-gradient-to-tr from-pink-400 via-purple-400 to-indigo-400 flex items-center justify-center text-white shadow-md">
+                <i data-lucide="sparkles" class="w-4 h-4 md:w-5 md:h-5"></i>
+            </div>
+            <div>
+                <h1 class="text-base md:text-lg font-bold text-slate-800 leading-tight">Tangle 扭扭樂 3D</h1>
+                <p class="text-[10px] md:text-xs text-slate-500 font-medium">3D 觸覺紓壓與感官模擬器</p>
+            </div>
+        </div>
+        
+        <!-- Mobile Panel Toggle Button -->
+        <button id="mobile-toggle-btn" onclick="toggleMobilePanel()" class="md:hidden glass-panel w-10 h-10 rounded-2xl shadow-lg flex items-center justify-center text-slate-700 pointer-events-auto active:scale-95 transition-all">
+            <i id="mobile-toggle-icon" data-lucide="sliders" class="w-5 h-5"></i>
+        </button>
+    </header>
+
+    <!-- Floating Tooltip / Mode Indicator -->
+    <div id="interaction-hint" class="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 pointer-events-none transition-all duration-300 w-auto max-w-[90vw] text-center">
+        <div class="glass-panel px-4 py-2 rounded-full shadow-lg flex items-center justify-center gap-2 text-xs font-semibold text-slate-700 border border-white/80">
+            <span id="hint-icon-container" class="w-2 h-2 rounded-full bg-emerald-500 animate-ping shrink-0"></span>
+            <span id="hint-text" class="truncate">單指按住並拖曳關節即可扭轉 Tangle 玩具</span>
+        </div>
+    </div>
+
+    <!-- Main Sidebar / Tabbed Controls -->
+    <aside id="main-sidebar" class="absolute bottom-4 left-4 right-4 md:left-auto md:top-4 md:bottom-4 md:w-96 z-20 flex flex-col pointer-events-auto transition-all duration-300 transform translate-y-0">
+        <div class="glass-panel rounded-3xl shadow-2xl border border-white/60 flex flex-col h-[380px] sm:h-[460px] md:h-full overflow-hidden">
+            <!-- Navigation Tabs Header -->
+            <div class="flex p-2 bg-slate-100/80 border-b border-slate-200/60 gap-1.5">
+                <button id="tab-btn-style" onclick="switchTab('style')" 
+                    class="flex-1 py-2.5 px-3 rounded-2xl text-xs md:text-sm font-bold flex items-center justify-center gap-2 transition-all duration-200 bg-white text-indigo-600 shadow-sm">
+                    <i data-lucide="palette" class="w-4 h-4"></i>
+                    <span>樣式與材質</span>
+                </button>
+                <button id="tab-btn-play" onclick="switchTab('play')" 
+                    class="flex-1 py-2.5 px-3 rounded-2xl text-xs md:text-sm font-bold flex items-center justify-center gap-2 transition-all duration-200 text-slate-500 hover:text-slate-800">
+                    <i data-lucide="gamepad-2" class="w-4 h-4"></i>
+                    <span>紓壓遊玩</span>
+                </button>
+            </div>
+
+            <!-- Tab Content Container -->
+            <div class="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar">
+
+                <!-- TAB 1: 樣式與材質 (Appearance & Materials) -->
+                <div id="tab-content-style" class="space-y-6">
+                    
+                    <!-- Material Finish Selection -->
+                    <div>
+                        <label class="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-2.5">材質質感 (Surface Polish)</label>
+                        <div class="grid grid-cols-2 gap-2.5">
+                            <button id="mat-btn-glossy" onclick="setMaterialType('glossy')" 
+                                class="p-3 rounded-2xl border-2 border-indigo-500 bg-indigo-50/60 text-indigo-700 flex flex-col items-center justify-center gap-1.5 transition-all">
+                                <i data-lucide="sparkles" class="w-5 h-5"></i>
+                                <span class="text-xs font-bold">亮面塑膠 (Glossy)</span>
+                            </button>
+                            <button id="mat-btn-matte" onclick="setMaterialType('matte')" 
+                                class="p-3 rounded-2xl border-2 border-transparent bg-slate-100/80 text-slate-600 hover:bg-slate-200/60 flex flex-col items-center justify-center gap-1.5 transition-all">
+                                <i data-lucide="cloud" class="w-5 h-5"></i>
+                                <span class="text-xs font-bold">霧面軟膠 (Matte)</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Preset Color Palettes -->
+                    <div>
+                        <label class="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-2.5">馬卡龍調色盤預設 (Preset Palettes)</label>
+                        <div class="grid grid-cols-2 gap-2.5">
+                            <!-- Palette 1: Macaron Dream -->
+                            <button onclick="applyPalette(0)" class="p-2.5 rounded-2xl border border-slate-200 hover:border-slate-300 bg-white/80 shadow-sm flex flex-col gap-2 group transition-all">
+                                <span class="text-xs font-semibold text-slate-600 group-hover:text-indigo-600">馬卡龍夢境</span>
+                                <div class="flex h-4 w-full rounded-lg overflow-hidden">
+                                    <div class="h-full flex-1" style="background:#FFB7B2"></div>
+                                    <div class="h-full flex-1" style="background:#FFDAC1"></div>
+                                    <div class="h-full flex-1" style="background:#E2F0CB"></div>
+                                    <div class="h-full flex-1" style="background:#B5EAD7"></div>
+                                    <div class="h-full flex-1" style="background:#C7CEEA"></div>
+                                </div>
+                            </button>
+                            <!-- Palette 2: Mint Lavender -->
+                            <button onclick="applyPalette(1)" class="p-2.5 rounded-2xl border border-slate-200 hover:border-slate-300 bg-white/80 shadow-sm flex flex-col gap-2 group transition-all">
+                                <span class="text-xs font-semibold text-slate-600 group-hover:text-indigo-600">薄荷薰衣草</span>
+                                <div class="flex h-4 w-full rounded-lg overflow-hidden">
+                                    <div class="h-full flex-1" style="background:#A8E6CF"></div>
+                                    <div class="h-full flex-1" style="background:#DCEDC1"></div>
+                                    <div class="h-full flex-1" style="background:#FFD3B6"></div>
+                                    <div class="h-full flex-1" style="background:#FFAAA5"></div>
+                                    <div class="h-full flex-1" style="background:#D4B2D8"></div>
+                                </div>
+                            </button>
+                            <!-- Palette 3: Sunset Pastel -->
+                            <button onclick="applyPalette(2)" class="p-2.5 rounded-2xl border border-slate-200 hover:border-slate-300 bg-white/80 shadow-sm flex flex-col gap-2 group transition-all">
+                                <span class="text-xs font-semibold text-slate-600 group-hover:text-indigo-600">日落彩霞</span>
+                                <div class="flex h-4 w-full rounded-lg overflow-hidden">
+                                    <div class="h-full flex-1" style="background:#FDE2F0"></div>
+                                    <div class="h-full flex-1" style="background:#FFCAD4"></div>
+                                    <div class="h-full flex-1" style="background:#B5E2FA"></div>
+                                    <div class="h-full flex-1" style="background:#EDAFB8"></div>
+                                    <div class="h-full flex-1" style="background:#F7AF9D"></div>
+                                </div>
+                            </button>
+                            <!-- Palette 4: Cyber Candy -->
+                            <button onclick="applyPalette(3)" class="p-2.5 rounded-2xl border border-slate-200 hover:border-slate-300 bg-white/80 shadow-sm flex flex-col gap-2 group transition-all">
+                                <span class="text-xs font-semibold text-slate-600 group-hover:text-indigo-600">繽紛軟糖</span>
+                                <div class="flex h-4 w-full rounded-lg overflow-hidden">
+                                    <div class="h-full flex-1" style="background:#FF6B6B"></div>
+                                    <div class="h-full flex-1" style="background:#4ECDC4"></div>
+                                    <div class="h-full flex-1" style="background:#FFE66D"></div>
+                                    <div class="h-full flex-1" style="background:#1A535C"></div>
+                                    <div class="h-full flex-1" style="background:#F7FFF7"></div>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Individual Segment Custom Color Picker -->
+                    <div>
+                        <div class="flex items-center justify-between mb-2.5">
+                            <label class="text-xs font-bold uppercase tracking-wider text-slate-400">18 節獨立關節配色 (Segment Customizer)</label>
+                            <span id="selected-segment-label" class="text-xs font-semibold text-indigo-600">選擇關節...</span>
+                        </div>
+                        <div id="segment-grid" class="grid grid-cols-6 gap-2 bg-slate-100/70 p-3 rounded-2xl border border-slate-200/80">
+                            <!-- Dynamically generated 18 color buttons -->
+                        </div>
+                        <!-- Color Input Picker -->
+                        <div class="mt-3 flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200">
+                            <span class="text-xs font-semibold text-slate-600">變更選定關節顏色：</span>
+                            <input type="color" id="segment-color-picker" value="#FFB7B2" onchange="onCustomColorChange(this.value)" class="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent">
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- TAB 2: 紓壓遊玩 (Play Mode) -->
+                <div id="tab-content-play" class="hidden space-y-6">
+                    
+                    <!-- Control Mode Toggle -->
+                    <div>
+                        <label class="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-2.5">互動操作模式 (Control Mode)</label>
+                        <div class="grid grid-cols-2 gap-2.5">
+                            <button id="mode-btn-twist" onclick="setInteractionMode('twist')" 
+                                class="p-3 rounded-2xl border-2 border-indigo-500 bg-indigo-50/60 text-indigo-700 flex flex-col items-center justify-center gap-1.5 transition-all">
+                                <i data-lucide="hand" class="w-5 h-5"></i>
+                                <span class="text-xs font-bold">扭轉玩具 (Twist)</span>
+                            </button>
+                            <button id="mode-btn-orbit" onclick="setInteractionMode('orbit')" 
+                                class="p-3 rounded-2xl border-2 border-transparent bg-slate-100/80 text-slate-600 hover:bg-slate-200/60 flex flex-col items-center justify-center gap-1.5 transition-all">
+                                <i data-lucide="rotate-3d" class="w-5 h-5"></i>
+                                <span class="text-xs font-bold">3D 視角旋轉 (Orbit)</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Shape Presets -->
+                    <div>
+                        <label class="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-2.5">姿態造型預設 (Shape Presets)</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="applyShapePreset('ring')" class="px-3 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 flex items-center gap-2 shadow-sm transition-all">
+                                <i data-lucide="disc" class="w-4 h-4 text-pink-500"></i>
+                                <span>經典圓環 (Classic)</span>
+                            </button>
+                            <button onclick="applyShapePreset('wave')" class="px-3 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 flex items-center gap-2 shadow-sm transition-all">
+                                <i data-lucide="waves" class="w-4 h-4 text-emerald-500"></i>
+                                <span>波浪蛇形 (Wave)</span>
+                            </button>
+                            <button onclick="applyShapePreset('infinity')" class="px-3 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 flex items-center gap-2 shadow-sm transition-all">
+                                <i data-lucide="infinity" class="w-4 h-4 text-purple-500"></i>
+                                <span>無限雙環 (Infinity)</span>
+                            </button>
+                            <button onclick="applyShapePreset('random')" class="px-3 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 flex items-center gap-2 shadow-sm transition-all">
+                                <i data-lucide="shuffle" class="w-4 h-4 text-amber-500"></i>
+                                <span>隨機姿態 (Random)</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Zen Relax Auto-Twist Mode -->
+                    <div class="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2.5">
+                                <div class="w-8 h-8 rounded-xl bg-indigo-500 text-white flex items-center justify-center">
+                                    <i data-lucide="sparkles" class="w-4 h-4"></i>
+                                </div>
+                                <div>
+                                    <h4 class="text-xs font-bold text-slate-800">Zen 靜心隨機自動流轉</h4>
+                                    <p class="text-[11px] text-slate-500">讓玩具像流體般平滑自動旋轉</p>
+                                </div>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="zen-toggle" onchange="toggleZenMode(this.checked)" class="sr-only peer">
+                                <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Joint Resistance & Physics Controls -->
+                    <div class="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-4">
+                        <div class="flex items-center gap-2 mb-1">
+                            <i data-lucide="sliders" class="w-4 h-4 text-indigo-600"></i>
+                            <h4 class="text-xs font-bold text-slate-800">關節物理阻力與手感調校</h4>
+                        </div>
+                        
+                        <!-- Friction Slider -->
+                        <div class="space-y-1.5">
+                            <div class="flex justify-between text-xs">
+                                <span class="font-semibold text-slate-600">關節旋轉阻力 (Joint Resistance)</span>
+                                <span id="val-friction" class="font-bold text-indigo-600">中等沉重 (0.50)</span>
+                            </div>
+                            <input type="range" id="slider-friction" min="0.1" max="1.0" step="0.05" value="0.5" 
+                                oninput="updatePhysicsParam('friction', this.value)"
+                                class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600">
+                            <div class="flex justify-between text-[10px] text-slate-400 font-medium">
+                                <span>輕盈流暢</span>
+                                <span>緊實沉重</span>
+                            </div>
+                        </div>
+
+                        <!-- Damping Slider -->
+                        <div class="space-y-1.5">
+                            <div class="flex justify-between text-xs">
+                                <span class="font-semibold text-slate-600">旋轉阻尼與潤滑感 (Physical Damping)</span>
+                                <span id="val-damping" class="font-bold text-indigo-600">適中 (0.08)</span>
+                            </div>
+                            <input type="range" id="slider-damping" min="0.02" max="0.25" step="0.01" value="0.08" 
+                                oninput="updatePhysicsParam('damping', this.value)"
+                                class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600">
+                            <div class="flex justify-between text-[10px] text-slate-400 font-medium">
+                                <span>黏滯沉穩</span>
+                                <span>彈性敏捷</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sound FX & Action Buttons -->
+                    <div class="space-y-3 pt-2">
+                        <div class="flex items-center justify-between px-1">
+                            <span class="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+                                <i data-lucide="volume-2" class="w-4 h-4 text-slate-400"></i> 關節轉動音效
+                            </span>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="sound-toggle" checked onchange="toggleSound(this.checked)" class="sr-only peer">
+                                <div class="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                        </div>
+
+                        <button onclick="resetForm()" class="w-full py-3 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-2xl shadow-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98]">
+                            <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                            <span>平滑重置回初始形狀</span>
+                        </button>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+    </aside>
+
+    <!-- Application Script -->
+    <script>
+        // --- Global Constants & Configurations ---
+        const NUM_SEGMENTS = 18;
+        const MAJOR_RADIUS = 1.1; // Radius of 90-degree curved tube arc
+        const TUBE_RADIUS = 0.32; // Thickness of the tube
+        
+        // Preset Macaron Color Schemes
+        const PALETTES = [
+            ['#FFB7B2', '#FFDAC1', '#E2F0CB', '#B5EAD7', '#C7CEEA'], // Macaron Dream
+            ['#A8E6CF', '#DCEDC1', '#FFD3B6', '#FFAAA5', '#D4B2D8'], // Mint Lavender
+            ['#FDE2F0', '#FFCAD4', '#B5E2FA', '#EDAFB8', '#F7AF9D'], // Sunset Pastel
+            ['#FF6B6B', '#4ECDC4', '#FFE66D', '#1A535C', '#F7FFF7']  // Candy Pop
+        ];
+
+        // System State
+        let scene, camera, renderer, controls;
+        let segmentGroups = [];       // Array of 18 segment Group containers
+        let twistPivots = [];         // Array of 18 pivot objects for rotation
+        let segmentMeshes = [];       // Array of 18 segment Tube meshes
+        let targetTwistAngles = new Array(NUM_SEGMENTS).fill(0);
+        let currentTwistAngles = new Array(NUM_SEGMENTS).fill(0);
+        let segmentColors = [];
+        
+        let selectedSegmentIndex = 0;
+        let interactionMode = 'twist'; // 'twist' or 'orbit'
+        let materialType = 'glossy';   // 'glossy' or 'matte'
+        let isZenMode = false;
+        let soundEnabled = true;
+
+        // Physics & Friction properties
+        let jointFriction = 0.5; // Resistance to user drag (higher = heavier drag)
+        let jointDamping = 0.08;  // Interp lerp damping factor (lower = viscous/heavy feel, higher = quick)
+
+        // Interaction state
+        let isDragging = false;
+        let draggedSegmentIndex = -1;
+        let previousPointerPosition = { x: 0, y: 0 };
+        let raycaster = new THREE.Raycaster();
+        let mouse = new THREE.Vector2();
+
+        // Audio Context
+        let audioCtx = null;
+        let lastSoundTime = 0;
+
+        // --- Custom Quarter-Arc Curve for Tangle 90-degree Elbow ---
+        class QuarterArcCurve extends THREE.Curve {
+            constructor(radius) {
+                super();
+                this.radius = radius;
+            }
+            getPoint(t, optionalTarget = new THREE.Vector3()) {
+                const angle = t * (Math.PI / 2);
+                const x = this.radius * (1 - Math.cos(angle));
+                const z = this.radius * Math.sin(angle);
+                return optionalTarget.set(x, 0, z);
+            }
+        }
+
+        // --- Audio Context Helpers & Synthesizer ---
+        function unlockAudioContext() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playClickSound(pitch = 1.0) {
+            if (!soundEnabled) return;
+            const now = performance.now();
+            if (now - lastSoundTime < 60) return; // Throttle sound frequency
+            lastSoundTime = now;
+
+            try {
+                unlockAudioContext();
+                
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(650 * pitch, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(150 * pitch, audioCtx.currentTime + 0.03);
+
+                gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.03);
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.035);
+            } catch (e) {
+                // Audio context fallback
+            }
+        }
+
+        // --- Material Factory ---
+        function createSegmentMaterial(colorHex) {
+            if (materialType === 'glossy') {
+                return new THREE.MeshStandardMaterial({
+                    color: new THREE.Color(colorHex),
+                    roughness: 0.15,
+                    metalness: 0.1
+                });
+            } else {
+                return new THREE.MeshStandardMaterial({
+                    color: new THREE.Color(colorHex),
+                    roughness: 0.85,
+                    metalness: 0.05
+                });
+            }
+        }
+
+        // --- Build Tangle Kinematic Chain ---
+        function buildTangleModel() {
+            initializeColors(PALETTES[0]);
+
+            const rootGroup = new THREE.Group();
+            rootGroup.name = "TangleRoot";
+            scene.add(rootGroup);
+
+            const curve = new QuarterArcCurve(MAJOR_RADIUS);
+            const tubeGeo = new THREE.TubeGeometry(curve, 32, TUBE_RADIUS, 32, false);
+            const capGeo = new THREE.TorusGeometry(TUBE_RADIUS + 0.012, 0.035, 16, 32);
+
+            let currentParent = rootGroup;
+
+            const defaultAngles = [
+                0, Math.PI/2, 0, -Math.PI/2, 
+                0, Math.PI/2, 0, -Math.PI/2,
+                0, Math.PI/2, 0, -Math.PI/2,
+                0, Math.PI/2, 0, -Math.PI/2,
+                0, 0
+            ];
+
+            segmentGroups = [];
+            twistPivots = [];
+            segmentMeshes = [];
+
+            for (let i = 0; i < NUM_SEGMENTS; i++) {
+                targetTwistAngles[i] = defaultAngles[i] || 0;
+                currentTwistAngles[i] = defaultAngles[i] || 0;
+
+                const segGroup = new THREE.Group();
+                segGroup.name = `SegmentGroup_${i}`;
+                currentParent.add(segGroup);
+                segmentGroups.push(segGroup);
+
+                const twistPivot = new THREE.Group();
+                twistPivot.name = `TwistPivot_${i}`;
+                twistPivot.rotation.z = currentTwistAngles[i];
+                segGroup.add(twistPivot);
+                twistPivots.push(twistPivot);
+
+                const material = createSegmentMaterial(segmentColors[i]);
+
+                const tubeMesh = new THREE.Mesh(tubeGeo, material);
+                tubeMesh.castShadow = true;
+                tubeMesh.receiveShadow = true;
+                tubeMesh.userData = { segmentIndex: i };
+                twistPivot.add(tubeMesh);
+                segmentMeshes.push(tubeMesh);
+
+                const startRing = new THREE.Mesh(capGeo, material);
+                startRing.rotation.y = Math.PI / 2;
+                startRing.castShadow = true;
+                twistPivot.add(startRing);
+
+                const endRing = new THREE.Mesh(capGeo, material);
+                endRing.position.set(MAJOR_RADIUS, 0, MAJOR_RADIUS);
+                endRing.rotation.y = Math.PI / 2;
+                endRing.castShadow = true;
+                twistPivot.add(endRing);
+
+                const nextAnchor = new THREE.Group();
+                nextAnchor.position.set(MAJOR_RADIUS, 0, MAJOR_RADIUS);
+                nextAnchor.rotation.y = Math.PI / 2;
+                twistPivot.add(nextAnchor);
+
+                currentParent = nextAnchor;
+            }
+        }
+
+        // --- Initialize Scene & 3D Environment ---
+        function init() {
+            const container = document.getElementById('canvas-container');
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color('#f1f5f9');
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(0, 4, 12);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.1;
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxDistance = 25;
+            controls.minDistance = 3;
+            controls.enabled = false; // Default interaction mode is 'twist'
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
+            scene.add(ambientLight);
+
+            const mainLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            mainLight.position.set(8, 12, 10);
+            mainLight.castShadow = true;
+            mainLight.shadow.mapSize.width = 2048;
+            mainLight.shadow.mapSize.height = 2048;
+            mainLight.shadow.bias = -0.0001;
+            scene.add(mainLight);
+
+            const fillLight = new THREE.DirectionalLight(0xb0d0ff, 0.6);
+            fillLight.position.set(-8, -6, -8);
+            scene.add(fillLight);
+
+            const rimLight = new THREE.DirectionalLight(0xffe0ee, 0.5);
+            rimLight.position.set(0, 10, -10);
+            scene.add(rimLight);
+
+            const shadowPlaneGeo = new THREE.PlaneGeometry(30, 30);
+            const shadowPlaneMat = new THREE.ShadowMaterial({ opacity: 0.12 });
+            const shadowPlane = new THREE.Mesh(shadowPlaneGeo, shadowPlaneMat);
+            shadowPlane.rotation.x = -Math.PI / 2;
+            shadowPlane.position.y = -3.5;
+            scene.add(shadowPlane);
+
+            buildTangleModel();
+
+            window.addEventListener('resize', onWindowResize);
+            const canvasEl = renderer.domElement;
+            canvasEl.style.touchAction = 'none';
+
+            canvasEl.addEventListener('pointerdown', onPointerDown, { passive: false });
+            canvasEl.addEventListener('pointermove', onPointerMove, { passive: false });
+            canvasEl.addEventListener('pointerup', onPointerUp);
+            canvasEl.addEventListener('pointercancel', onPointerUp);
+
+            window.addEventListener('touchstart', unlockAudioContext, { once: true });
+            window.addEventListener('pointerdown', unlockAudioContext, { once: true });
+
+            renderSegmentGrid();
+            lucide.createIcons();
+
+            animate();
+        }
+
+        // --- Color Palettes & Customizers ---
+        function initializeColors(palette) {
+            segmentColors = [];
+            for (let i = 0; i < NUM_SEGMENTS; i++) {
+                segmentColors.push(palette[i % palette.length]);
+            }
+        }
+
+        function applyPalette(index) {
+            const palette = PALETTES[index];
+            initializeColors(palette);
+            updateAllMaterials();
+            renderSegmentGrid();
+        }
+
+        function updateAllMaterials() {
+            segmentMeshes.forEach((mesh, i) => {
+                const mat = createSegmentMaterial(segmentColors[i]);
+                mesh.material = mat;
+                mesh.parent.children.forEach(child => {
+                    if (child.isMesh) child.material = mat;
+                });
+            });
+        }
+
+        function setMaterialType(type) {
+            materialType = type;
+            document.getElementById('mat-btn-glossy').className = type === 'glossy' 
+                ? 'p-3 rounded-2xl border-2 border-indigo-500 bg-indigo-50/60 text-indigo-700 flex flex-col items-center justify-center gap-1.5 transition-all'
+                : 'p-3 rounded-2xl border-2 border-transparent bg-slate-100/80 text-slate-600 hover:bg-slate-200/60 flex flex-col items-center justify-center gap-1.5 transition-all';
+            
+            document.getElementById('mat-btn-matte').className = type === 'matte' 
+                ? 'p-3 rounded-2xl border-2 border-indigo-500 bg-indigo-50/60 text-indigo-700 flex flex-col items-center justify-center gap-1.5 transition-all'
+                : 'p-3 rounded-2xl border-2 border-transparent bg-slate-100/80 text-slate-600 hover:bg-slate-200/60 flex flex-col items-center justify-center gap-1.5 transition-all';
+
+            updateAllMaterials();
+        }
+
+        function renderSegmentGrid() {
+            const grid = document.getElementById('segment-grid');
+            grid.innerHTML = '';
+            for (let i = 0; i < NUM_SEGMENTS; i++) {
+                const btn = document.createElement('button');
+                btn.className = `h-8 rounded-xl border-2 transition-all flex items-center justify-center text-[10px] font-bold ${
+                    i === selectedSegmentIndex ? 'border-indigo-600 scale-110 shadow-md' : 'border-white/80 hover:scale-105'
+                }`;
+                btn.style.backgroundColor = segmentColors[i];
+                btn.innerText = i + 1;
+                btn.onclick = () => selectSegment(i);
+                grid.appendChild(btn);
+            }
+        }
+
+        function selectSegment(index) {
+            selectedSegmentIndex = index;
+            document.getElementById('selected-segment-label').innerText = `關節 #${index + 1}`;
+            document.getElementById('segment-color-picker').value = segmentColors[index];
+            renderSegmentGrid();
+
+            const mesh = segmentMeshes[index];
+            if (mesh && mesh.material) {
+                const origColor = mesh.material.color.clone();
+                mesh.material.color.setHex(0xffffff);
+                setTimeout(() => {
+                    mesh.material.color.copy(origColor);
+                }, 180);
+            }
+        }
+
+        function onCustomColorChange(hex) {
+            segmentColors[selectedSegmentIndex] = hex;
+            const mat = createSegmentMaterial(hex);
+            const mesh = segmentMeshes[selectedSegmentIndex];
+            if (mesh) {
+                mesh.material = mat;
+                mesh.parent.children.forEach(child => {
+                    if (child.isMesh) child.material = mat;
+                });
+            }
+            renderSegmentGrid();
+        }
+
+        // --- Interaction & Dragging Kinematics ---
+        function setInteractionMode(mode) {
+            interactionMode = mode;
+            controls.enabled = (mode === 'orbit');
+            
+            const hintText = document.getElementById('hint-text');
+            const hintIcon = document.getElementById('hint-icon-container');
+
+            if (mode === 'twist') {
+                hintText.innerText = "按住並拖曳關節即可扭轉 Tangle 玩具";
+                hintIcon.className = "w-2 h-2 rounded-full bg-emerald-500 animate-ping";
+                document.getElementById('mode-btn-twist').className = 'p-3 rounded-2xl border-2 border-indigo-500 bg-indigo-50/60 text-indigo-700 flex flex-col items-center justify-center gap-1.5 transition-all';
+                document.getElementById('mode-btn-orbit').className = 'p-3 rounded-2xl border-2 border-transparent bg-slate-100/80 text-slate-600 hover:bg-slate-200/60 flex flex-col items-center justify-center gap-1.5 transition-all';
+            } else {
+                hintText.innerText = "拖曳自由旋轉 3D 全景視角";
+                hintIcon.className = "w-2 h-2 rounded-full bg-indigo-500 animate-ping";
+                document.getElementById('mode-btn-orbit').className = 'p-3 rounded-2xl border-2 border-indigo-500 bg-indigo-50/60 text-indigo-700 flex flex-col items-center justify-center gap-1.5 transition-all';
+                document.getElementById('mode-btn-twist').className = 'p-3 rounded-2xl border-2 border-transparent bg-slate-100/80 text-slate-600 hover:bg-slate-200/60 flex flex-col items-center justify-center gap-1.5 transition-all';
+            }
+        }
+
+        function onPointerDown(event) {
+            if (interactionMode !== 'twist') return;
+
+            unlockAudioContext();
+
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(segmentMeshes);
+
+            if (intersects.length > 0) {
+                isDragging = true;
+                draggedSegmentIndex = intersects[0].object.userData.segmentIndex;
+                selectSegment(draggedSegmentIndex);
+                previousPointerPosition = { x: event.clientX, y: event.clientY };
+                if (event.cancelable) event.preventDefault();
+            }
+        }
+
+        function onPointerMove(event) {
+            if (!isDragging || draggedSegmentIndex === -1 || interactionMode !== 'twist') return;
+            if (event.cancelable) event.preventDefault();
+
+            const deltaX = event.clientX - previousPointerPosition.x;
+            const deltaY = event.clientY - previousPointerPosition.y;
+            const delta = Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : -deltaY;
+
+            const baseSensitivity = 0.025;
+            const frictionFactor = Math.max(0.15, 1.25 - jointFriction * 0.95);
+            const twistDelta = delta * baseSensitivity * frictionFactor;
+            
+            const oldAngle = targetTwistAngles[draggedSegmentIndex];
+            targetTwistAngles[draggedSegmentIndex] += twistDelta;
+
+            if (Math.abs(targetTwistAngles[draggedSegmentIndex] - oldAngle) > (0.12 * frictionFactor)) {
+                const pitchMod = 0.8 + (1.0 - jointFriction) * 0.4 + (draggedSegmentIndex % 4) * 0.08;
+                playClickSound(pitchMod);
+            }
+
+            previousPointerPosition = { x: event.clientX, y: event.clientY };
+        }
+
+        function onPointerUp() {
+            isDragging = false;
+            draggedSegmentIndex = -1;
+        }
+
+        // --- Mobile UI Toggle ---
+        let mobilePanelOpen = true;
+        function toggleMobilePanel() {
+            const sidebar = document.getElementById('main-sidebar');
+            mobilePanelOpen = !mobilePanelOpen;
+
+            if (mobilePanelOpen) {
+                sidebar.classList.remove('translate-y-[120%]', 'opacity-0', 'pointer-events-none');
+                sidebar.classList.add('translate-y-0', 'opacity-100');
+            } else {
+                sidebar.classList.add('translate-y-[120%]', 'opacity-0', 'pointer-events-none');
+                sidebar.classList.remove('translate-y-0', 'opacity-100');
+            }
+        }
+
+        // --- Shape Presets & Animation Controls ---
+        function applyShapePreset(preset) {
+            if (isZenMode) {
+                document.getElementById('zen-toggle').checked = false;
+                toggleZenMode(false);
+            }
+
+            const presets = {
+                'ring': [0, Math.PI/2, 0, -Math.PI/2, 0, Math.PI/2, 0, -Math.PI/2, 0, Math.PI/2, 0, -Math.PI/2, 0, Math.PI/2, 0, -Math.PI/2, 0, 0],
+                'wave': [0, Math.PI/3, Math.PI/3, 0, -Math.PI/3, -Math.PI/3, 0, Math.PI/3, Math.PI/3, 0, -Math.PI/3, -Math.PI/3, 0, Math.PI/3, Math.PI/3, 0, -Math.PI/3, 0],
+                'infinity': [0, Math.PI/2, Math.PI, -Math.PI/2, 0, Math.PI/2, Math.PI, -Math.PI/2, 0, Math.PI/2, Math.PI, -Math.PI/2, 0, Math.PI/2, Math.PI, -Math.PI/2, 0, 0],
+                'random': Array.from({ length: NUM_SEGMENTS }, () => (Math.floor(Math.random() * 4) * Math.PI / 2))
+            };
+
+            const targetArray = presets[preset] || presets['ring'];
+            for (let i = 0; i < NUM_SEGMENTS; i++) {
+                targetTwistAngles[i] = targetArray[i];
+            }
+            playClickSound(1.2);
+        }
+
+        function resetForm() {
+            applyShapePreset('ring');
+        }
+
+        function toggleZenMode(enabled) {
+            isZenMode = enabled;
+        }
+
+        function toggleSound(enabled) {
+            soundEnabled = enabled;
+        }
+
+        function updatePhysicsParam(param, value) {
+            const val = parseFloat(value);
+            if (param === 'friction') {
+                jointFriction = val;
+                let label = "中等沉重";
+                if (val < 0.3) label = "輕盈流暢";
+                else if (val > 0.7) label = "緊實沉重";
+                document.getElementById('val-friction').innerText = `${label} (${val.toFixed(2)})`;
+            } else if (param === 'damping') {
+                jointDamping = val;
+                let label = "適中";
+                if (val < 0.05) label = "高黏滯沉穩";
+                else if (val > 0.15) label = "彈性敏捷";
+                document.getElementById('val-damping').innerText = `${label} (${val.toFixed(2)})`;
+            }
+        }
+
+        // --- Tab Navigation Switcher ---
+        function switchTab(tabName) {
+            const styleTabBtn = document.getElementById('tab-btn-style');
+            const playTabBtn = document.getElementById('tab-btn-play');
+            const styleTabContent = document.getElementById('tab-content-style');
+            const playTabContent = document.getElementById('tab-content-play');
+
+            if (tabName === 'style') {
+                styleTabBtn.className = "flex-1 py-2.5 px-3 rounded-2xl text-xs md:text-sm font-bold flex items-center justify-center gap-2 transition-all duration-200 bg-white text-indigo-600 shadow-sm";
+                playTabBtn.className = "flex-1 py-2.5 px-3 rounded-2xl text-xs md:text-sm font-bold flex items-center justify-center gap-2 transition-all duration-200 text-slate-500 hover:text-slate-800";
+                styleTabContent.classList.remove('hidden');
+                playTabContent.classList.add('hidden');
+            } else {
+                playTabBtn.className = "flex-1 py-2.5 px-3 rounded-2xl text-xs md:text-sm font-bold flex items-center justify-center gap-2 transition-all duration-200 bg-white text-indigo-600 shadow-sm";
+                styleTabBtn.className = "flex-1 py-2.5 px-3 rounded-2xl text-xs md:text-sm font-bold flex items-center justify-center gap-2 transition-all duration-200 text-slate-500 hover:text-slate-800";
+                playTabContent.classList.remove('hidden');
+                styleTabContent.classList.add('hidden');
+            }
+        }
+
+        // --- Center of Mass Auto-Centering ---
+        function updateCenterOfMass() {
+            const root = scene.getObjectByName("TangleRoot");
+            if (!root) return;
+
+            const bbox = new THREE.Box3().setFromObject(root);
+            const center = new THREE.Vector3();
+            bbox.getCenter(center);
+
+            root.position.lerp(center.negate(), 0.05);
+        }
+
+        // --- Window Resize Handler ---
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- Main Render Loop ---
+        function animate(time) {
+            requestAnimationFrame(animate);
+
+            if (isZenMode && time) {
+                const t = time * 0.0015;
+                for (let i = 0; i < NUM_SEGMENTS; i++) {
+                    targetTwistAngles[i] += Math.sin(t + i * 0.4) * 0.015;
+                }
+            }
+
+            for (let i = 0; i < NUM_SEGMENTS; i++) {
+                currentTwistAngles[i] += (targetTwistAngles[i] - currentTwistAngles[i]) * jointDamping;
+                if (twistPivots[i]) {
+                    twistPivots[i].rotation.z = currentTwistAngles[i];
+                }
+            }
+
+            updateCenterOfMass();
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // Start Application on Window Load
+        window.onload = () => {
+            init();
+        };
+    </script>
+</body>
+</html>
